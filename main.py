@@ -129,7 +129,4 @@ async def verify(ctx, member: discord.Member = None):
     )
     await ctx.send(embed=embed)
 
-token = os.getenv("DISCORD_TOKEN")
-print(f"Token is: {token}")
-
-bot.run(token)
+bot.run(os.getenv("DISCORD_TOKEN"))
