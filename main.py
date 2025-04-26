@@ -6,6 +6,8 @@ from io import BytesIO
 import re
 import os
 
+os.system("apt update && apt install -y tesseract-ocr")
+
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
