@@ -126,4 +126,4 @@ async def verify(ctx, member: discord.Member = None):
     )
     await ctx.send(embed=embed)
 
-bot.run("MTMwNzM0ODczODc1MDE1MjcyNQ.G7ZZeb.JGVPYGKJrgyrQkoAbFGMMZMvqKmgqflKKkTTYo")
+bot.run("MTMwNzM0ODczODc1MDE1MjcyNQ.GaV39F.UCqqxq9_cODZc5n6xdYLPRQKISMjXIDnz4NUec")
