@@ -1,2 +1,5 @@
 [phases.setup]
-nixPkgs = ['tesseract']
+nixPkgs = ['tesseract', 'python311']
+
+[start]
+cmd = "python main.py"
