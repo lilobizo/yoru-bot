@@ -4,6 +4,7 @@ import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 from io import BytesIO
 import re
+import os
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -126,4 +127,4 @@ async def verify(ctx, member: discord.Member = None):
     )
     await ctx.send(embed=embed)
 
-bot.run("MTMwNzM0ODczODc1MDE1MjcyNQ.GaV39F.UCqqxq9_cODZc5n6xdYLPRQKISMjXIDnz4NUec")
+bot.run(os.getenv("DISCORD_TOKEN"))
