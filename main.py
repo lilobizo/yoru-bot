@@ -43,56 +43,75 @@ async def on_message(message):
     if message.channel.id != VERIFY_CHANNEL_ID:
         return
 
-    if message.attachments:
-        for attachment in message.attachments:
-            if attachment.filename.endswith(('png', 'jpg', 'jpeg')):
-                img_data = await attachment.read()
-                img = Image.open(BytesIO(img_data))
+    member = message.author
+    guild = message.guild
+    verified_role = guild.get_role(VERIFIED_ROLE_ID)
 
-                img = img.convert('L')
-                img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
-                img = img.filter(ImageFilter.SHARPEN)
-                enhancer = ImageEnhance.Contrast(img)
-                img = enhancer.enhance(2)
+    # Skip users who are already verified
+    if verified_role in member.roles:
+        return
 
-                threshold = 150
-                img = img.point(lambda p: 255 if p > threshold else 0)
+    if not message.attachments:
+        return
 
-                custom_config = r'--oem 3 --psm 6'
-                text = pytesseract.image_to_string(img, config=custom_config)
+    yoru_counts = []
+    valid_images = [a for a in message.attachments if a.filename.lower().endswith(('png', 'jpg', 'jpeg'))]
 
-                print(f"OCR result:\n{text}")
+    for attachment in valid_images:
+        img_data = await attachment.read()
+        img = Image.open(BytesIO(img_data)).convert('L')
+        img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
+        img = img.filter(ImageFilter.SHARPEN)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(2)
 
-                log_channel = bot.get_channel(LOG_CHANNEL_ID)
+        threshold = 150
+        img = img.point(lambda p: 255 if p > threshold else 0)
 
-                if matches_yoru(text):
-                    role = message.guild.get_role(VERIFIED_ROLE_ID)
-                    if role:
-                        await message.author.add_roles(role)
+        custom_config = r'--oem 3 --psm 6'
+        text = pytesseract.image_to_string(img, config=custom_config)
+        print(f"OCR result from {attachment.filename}:\n{text}")
 
-                        embed = discord.Embed(
-                            description=f"<:checkmarklilo:1365681258558001233> {message.author.mention} has been verified.",
-                            color=0x0f0f0f
-                        )
-                        await log_channel.send(embed=embed)
+        yoru_count = len(re.findall(r"\byoru\b", text.lower()))
+        yoru_counts.append(yoru_count)
 
-                        embed2 = discord.Embed(
-                            description=f"<:checkmarklilo:1365681258558001233> {message.author.mention}, you have been verified!",
-                            color=0x0f0f0f
-                        )
-                        await message.channel.send(embed=embed2)
-                    else:
-                        embed = discord.Embed(
-                            description="<:crosslilo:1365681282109145141> Error: Verified role not found.",
-                            color=0x0f0f0f
-                        )
-                        await log_channel.send(embed=embed)
-                else:
-                    embed = discord.Embed(
-                        description=f"<:infolilo:1365681320713257092> {message.author.mention} uploaded an image but '/yoru' was not detected.",
-                        color=0x0f0f0f
-                    )
-                    await log_channel.send(embed=embed)
+    log_channel = bot.get_channel(LOG_CHANNEL_ID)
+
+    if len(valid_images) == 1:
+        # Only one image, must have at least 3 "yoru"
+        if yoru_counts[0] >= 3:
+            await member.add_roles(verified_role)
+            await log_channel.send(embed=discord.Embed(
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified.",
+                color=0x0f0f0f
+            ))
+            await message.channel.send(embed=discord.Embed(
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified!",
+                color=0x0f0f0f
+            ))
+        else:
+            await log_channel.send(embed=discord.Embed(
+                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded an image but only {yoru_counts[0]} instance(s) of 'yoru' were found — 3 required.",
+                color=0x0f0f0f
+            ))
+    else:
+        # Multiple images: each must have at least 1 "yoru"
+        if all(count >= 1 for count in yoru_counts) and len(yoru_counts) == len(valid_images):
+            await member.add_roles(verified_role)
+            await log_channel.send(embed=discord.Embed(
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified.",
+                color=0x0f0f0f
+            ))
+            await message.channel.send(embed=discord.Embed(
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified!",
+                color=0x0f0f0f
+            ))
+        else:
+            await log_channel.send(embed=discord.Embed(
+                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded multiple images but not all had 'yoru' in them.",
+                color=0x0f0f0f
+            ))
+
 
 @bot.command()
 async def verify(ctx, member: discord.Member = None):
