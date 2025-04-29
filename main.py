@@ -86,12 +86,12 @@ async def on_message(message):
                 color=0x0f0f0f
             ))
             await message.channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified!",
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified.",
                 color=0x0f0f0f
             ))
         else:
             await log_channel.send(embed=discord.Embed(
-                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded an image but only {yoru_counts[0]} instance(s) of 'yoru' were found — 3 required.",
+                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded an image but only {yoru_counts[0]} comments of 'yoru' were found — 3+ required.",
                 color=0x0f0f0f
             ))
     else:
@@ -99,16 +99,16 @@ async def on_message(message):
         if all(count >= 1 for count in yoru_counts) and len(yoru_counts) == len(valid_images):
             await member.add_roles(verified_role)
             await log_channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified.",
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified succesfully.",
                 color=0x0f0f0f
             ))
             await message.channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified!",
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you are now verified.",
                 color=0x0f0f0f
             ))
         else:
             await log_channel.send(embed=discord.Embed(
-                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded multiple images but not all had 'yoru' in them.",
+                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded multiple images but not all contained 'yoru' comments.",
                 color=0x0f0f0f
             ))
 
