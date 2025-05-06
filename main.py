@@ -2,150 +2,230 @@ import discord
 from discord.ext import commands
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
-from io import BytesIO
-import re
+import requests
+import io
+import json
 import os
+import re
 
-os.system("apt update && apt install -y tesseract-ocr")
-
+# Intents setup
 intents = discord.Intents.default()
-intents.messages = True
 intents.message_content = True
 intents.guilds = True
 intents.members = True
 
-bot = commands.Bot(command_prefix=".", intents=intents)
 
-VERIFY_CHANNEL_ID = 1365107408095019058
-VERIFIED_ROLE_ID = 1365097987948281978
-LOG_CHANNEL_ID = 1365678818852995123
-VERIFIER_ROLE_ID = 1365094101288091770
 
-def matches_yoru(text):
-    text = text.lower()
-    patterns = [r"yoru"]
-    for pattern in patterns:
-        if re.search(pattern, text):
-            return True
-    return False
+# Bot setup
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
+SETTINGS_FILE = "settings.json"
+
+
+# Load settings from file
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Save settings to file
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, indent=4)
+
+settings = load_settings()
+
+# SET COMMAND GROUP
+@bot.group(aliases=['help', 'setup'])
+@commands.has_permissions(administrator=True)
+async def set(ctx):
+    if ctx.invoked_subcommand is None:
+        embed = discord.Embed(
+            title="<:lilosetup:1369333819945259098> **Configuration Commands**",
+            description=(
+                " **Menu**\n\n"
+                "<:slashcommandlilo:1369334588622639255> **.set proof *<channel>*** — Set the channel where users should submit their proof.\n\n"
+                "<:slashcommandlilo:1369334588622639255> **.set role *<role>*** — Set the role that will be rewarded after successful verification.\n\n"
+                "<:slashcommandlilo:1369334588622639255> **.set logs *<channel>*** — Set the log channel for all verification attempts.\n\n"
+                "<:slashcommandlilo:1369334588622639255> **.set vanity *<vanity>*** — Set the required vanity URL users must include in their screenshot comment. *(eg: .set vanity yoru)*\n\n"
+                "<:slashcommandlilo:1369334588622639255> **.verify *<user>*** — Manually verify a user to exempt them from verifying."
+            ),
+            color=0x0f0f0f
+        )
+        await ctx.send(embed=embed)
+
+
+@set.command()
+async def proof(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    settings.setdefault(guild_id, {})["proof_channel"] = channel.id
+    save_settings(settings)
+
+    embed = discord.Embed(
+        description=f"<:checkmarklilo:1365681258558001233> Proof channel set to {channel.mention}",
+        color=0x0f0f0f
+    )
+    await ctx.send(embed=embed)
+
+@set.command()
+async def logs(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    settings.setdefault(guild_id, {})["log_channel"] = channel.id
+    save_settings(settings)
+
+    embed = discord.Embed(
+        description=f"<:infolilo:1365681320713257092> Logs channel set to {channel.mention}",
+        color=0x0f0f0f
+    )
+    await ctx.send(embed=embed)
+
+@set.command()
+async def role(ctx, role: discord.Role):
+    guild_id = str(ctx.guild.id)
+    settings.setdefault(guild_id, {})["verified_role"] = role.id
+    save_settings(settings)
+
+    embed = discord.Embed(
+        description=f"<:checkmarklilo:1365681258558001233> Verified role set to {role.name}",
+        color=0x0f0f0f
+    )
+    await ctx.send(embed=embed)
+
+@set.command()
+async def vanity(ctx, *, word: str):
+    guild_id = str(ctx.guild.id)
+    settings.setdefault(guild_id, {})["vanity_word"] = word.lower()
+    save_settings(settings)
+
+    embed = discord.Embed(
+        description=f"<:checkmarklilo:1365681258558001233> Vanity URL set to `{word}`",
+        color=0x0f0f0f
+    )
+    await ctx.send(embed=embed)
+
+# VERIFY COMMAND
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def verify(ctx, member: discord.Member = None):
+    guild_id = str(ctx.guild.id)
+    guild_settings = settings.get(guild_id)
+
+    if not guild_settings or "verified_role" not in guild_settings:
+        embed = discord.Embed(
+            description="<:infolilo:1365681320713257092> Verified role is not set for this server.\nUse `.setup` to view the setup configuration.",
+            color=0xffcc00
+        )
+        return await ctx.send(embed=embed)
+
+    if not member:
+        embed = discord.Embed(
+            description="<:infolilo:1365681320713257092> Mention a user to verify.",
+            color=0xff4d4d
+        )
+        return await ctx.send(embed=embed)
+
+    role = ctx.guild.get_role(guild_settings["verified_role"])
+    if role:
+        await member.add_roles(role)
+        embed = discord.Embed(
+            description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been manually verified.",
+            color=0x00cc66
+        )
+        await ctx.send(embed=embed)
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
+    if message.author.bot or not message.guild:
         return
 
-    await bot.process_commands(message)
+    guild_id = str(message.guild.id)
+    guild_settings = settings.get(guild_id)
 
-    if message.channel.id != VERIFY_CHANNEL_ID:
+    if not guild_settings or not guild_settings.get("proof_channel"):
+        return
+
+    if message.channel.id != int(guild_settings["proof_channel"]):
+        return
+
+    print(f"[LOG] Processing message from {message.author} in {message.channel.name}...")
+
+    if not message.attachments:
+        print("No attachments found.")
         return
 
     member = message.author
     guild = message.guild
-    verified_role = guild.get_role(VERIFIED_ROLE_ID)
+    verified_role = guild.get_role(guild_settings.get("verified_role"))
 
-    # Skip users who are already verified
-    if verified_role in member.roles:
+    if not verified_role or verified_role in member.roles:
+        print("Already verified or no role found.")
         return
 
-    if not message.attachments:
+    vanity_word = guild_settings.get("vanity_word", "").lower()
+    if not vanity_word:
+        print("Vanity word not set.")
         return
 
-    yoru_counts = []
     valid_images = [a for a in message.attachments if a.filename.lower().endswith(('png', 'jpg', 'jpeg'))]
+    if not valid_images:
+        print("No valid image attachments.")
+        return
+
+    log_channel = bot.get_channel(guild_settings.get("log_channel"))
+
+    total_count = 0
+    individual_counts = []
 
     for attachment in valid_images:
-        img_data = await attachment.read()
-        img = Image.open(BytesIO(img_data)).convert('L')
-        img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
-        img = img.filter(ImageFilter.SHARPEN)
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(2)
+        try:
+            img_data = await attachment.read()
+            img = Image.open(io.BytesIO(img_data)).convert('L')
+            img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
+            img = img.filter(ImageFilter.SHARPEN)
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2)
+            threshold = 150
+            img = img.point(lambda p: 255 if p > threshold else 0)
 
-        threshold = 150
-        img = img.point(lambda p: 255 if p > threshold else 0)
+            text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
+            print(f"OCR Output:\n{text}")
 
-        custom_config = r'--oem 3 --psm 6'
-        text = pytesseract.image_to_string(img, config=custom_config)
-        print(f"OCR result from {attachment.filename}:\n{text}")
+            # Match vanity word as substring (case-insensitive)
+            count = len(re.findall(re.escape(vanity_word), text, re.IGNORECASE))
+            individual_counts.append(count)
+            total_count += count
+        except Exception as e:
+            print(f"Error processing image: {e}")
 
-        yoru_count = len(re.findall(r"\byoru\b", text.lower()))
-        yoru_counts.append(yoru_count)
+    required = 4 if len(valid_images) == 1 else 3
 
-    log_channel = bot.get_channel(LOG_CHANNEL_ID)
-
-    if len(valid_images) == 1:
-        # Only one image, must have at least 3 "yoru"
-        if yoru_counts[0] >= 3:
-            await member.add_roles(verified_role)
+    if total_count >= required:
+        await member.add_roles(verified_role)
+        await message.channel.send(embed=discord.Embed(
+            description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified.",
+            color=0x0f0f0f
+        ))
+        if log_channel:
             await log_channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified.",
-                color=0x0f0f0f
-            ))
-            await message.channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you have been verified.",
-                color=0x0f0f0f
-            ))
-        else:
-            await log_channel.send(embed=discord.Embed(
-                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded an image but only {yoru_counts[0]} comments of 'yoru' were found — 3+ required.",
+                description=f"<:checkmarklilo:1365681258558001233> {member.mention} verified with {total_count} matches ({' + '.join(map(str, individual_counts))}).",
                 color=0x0f0f0f
             ))
     else:
-        # Multiple images: each must have at least 1 "yoru"
-        if all(count >= 1 for count in yoru_counts) and len(yoru_counts) == len(valid_images):
-            await member.add_roles(verified_role)
+        print(f"Verification failed. Total matches: {total_count}")
+        if log_channel:
             await log_channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been verified succesfully.",
-                color=0x0f0f0f
-            ))
-            await message.channel.send(embed=discord.Embed(
-                description=f"<:checkmarklilo:1365681258558001233> {member.mention}, you are now verified.",
-                color=0x0f0f0f
-            ))
-        else:
-            await log_channel.send(embed=discord.Embed(
-                description=f"<:infolilo:1365681320713257092> {member.mention} uploaded multiple images but not all contained 'yoru' comments.",
+                description=f"<:infolilo:1365681320713257092> {member.mention} failed verification. Found only {total_count} match(es) ({' + '.join(map(str, individual_counts))}). Needed {required}.",
                 color=0x0f0f0f
             ))
 
+    await bot.process_commands(message)
 
-@bot.command()
-async def verify(ctx, member: discord.Member = None):
-    verifier_role = discord.utils.get(ctx.author.roles, id=VERIFIER_ROLE_ID)
-    if verifier_role is None:
-        embed = discord.Embed(
-            description="<:crosslilo:1365681282109145141> You don't have permission to use this command.",
-            color=0x0f0f0f
-        )
-        await ctx.send(embed=embed)
-        return
+@bot.event
+async def on_message(message):
+    await bot.process_commands(message)
 
-    if member is None:
-        embed = discord.Embed(
-            description="<:infolilo:1365681320713257092> Mention a user or provide a user ID to verify.",
-            color=0x0f0f0f
-        )
-        await ctx.send(embed=embed)
-        return
 
-    role = ctx.guild.get_role(VERIFIED_ROLE_ID)
-    if not role:
-        embed = discord.Embed(
-            description="<:infolilo:1365681320713257092> Verified role not found in the server.",
-            color=0x0f0f0f
-        )
-        await ctx.send(embed=embed)
-        return
-
-    await member.add_roles(role)
-    embed = discord.Embed(
-        description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been manually verified.",
-        color=0x0f0f0f
-    )
-    await ctx.send(embed=embed)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
