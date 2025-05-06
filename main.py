@@ -17,7 +17,7 @@ intents.members = True
 
 
 # Bot setup
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot = commands.Bot(command_prefix='.', intents=intents, help_command=None)
 
 SETTINGS_FILE = "settings.json"
 
