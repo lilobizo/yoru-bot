@@ -122,7 +122,7 @@ async def verify(ctx, member: discord.Member = None):
     if not member:
         embed = discord.Embed(
             description="<:infolilo:1365681320713257092> Mention a user to verify.",
-            color=0xff4d4d
+            color=0x0f0f0f
         )
         return await ctx.send(embed=embed)
 
@@ -131,7 +131,7 @@ async def verify(ctx, member: discord.Member = None):
         await member.add_roles(role)
         embed = discord.Embed(
             description=f"<:checkmarklilo:1365681258558001233> {member.mention} has been manually verified.",
-            color=0x00cc66
+            color=0x0f0f0f
         )
         await ctx.send(embed=embed)
 
@@ -139,6 +139,9 @@ async def verify(ctx, member: discord.Member = None):
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
+
+    # Run commands regardless
+    await bot.process_commands(message)
 
     guild_id = str(message.guild.id)
     guild_settings = settings.get(guild_id)
@@ -192,7 +195,6 @@ async def on_message(message):
             text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
             print(f"OCR Output:\n{text}")
 
-            # Match vanity word as substring (case-insensitive)
             count = len(re.findall(re.escape(vanity_word), text, re.IGNORECASE))
             individual_counts.append(count)
             total_count += count
@@ -220,11 +222,6 @@ async def on_message(message):
                 color=0x0f0f0f
             ))
 
-    await bot.process_commands(message)
-
-@bot.event
-async def on_message(message):
-    await bot.process_commands(message)
 
 
 
