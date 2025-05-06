@@ -114,8 +114,8 @@ async def verify(ctx, member: discord.Member = None):
 
     if not guild_settings or "verified_role" not in guild_settings:
         embed = discord.Embed(
-            description="<:infolilo:1365681320713257092> Verified role is not set for this server.\nUse `.setup` to view the setup configuration.",
-            color=0xffcc00
+            description="<:infolilo:1365681320713257092> Verified role is not set for this server. Use `.setup` to view the setup configuration.",
+            color=0x0f0f0f
         )
         return await ctx.send(embed=embed)
 
